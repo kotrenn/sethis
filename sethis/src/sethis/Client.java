@@ -83,6 +83,8 @@ public class Client
 	public static boolean processReadySet(Set<SelectionKey> readySet)
 	                                                                 throws Exception
 	{
+		boolean ret = false;
+
 		SelectionKey key = null;
 		Iterator<SelectionKey> iterator = null;
 		iterator = readySet.iterator();
@@ -109,16 +111,18 @@ public class Client
 			if (key.isWritable())
 			{
 				String message = Client.getUserInput();
-				if (message.equalsIgnoreCase("bye")) return true; // Exit
+				if (message.equalsIgnoreCase("bye")) ret = true; // Exit
 				Client.processWrite(key, message);
 			}
 		}
 		
-		return false; // Not done yet
+		return ret; // Not done yet
 	}
 
 	public static boolean processConnect(SelectionKey key)
 	{
+		System.out.println("processConnect()");
+		
 		SocketChannel channel = (SocketChannel)key.channel();
 
 		try
@@ -141,6 +145,8 @@ public class Client
 	
 	public static String processRead(SelectionKey key) throws Exception
 	{
+		System.out.println("processRead()");
+
 		SocketChannel sChannel = (SocketChannel)key.channel();
 		ByteBuffer buffer = ByteBuffer.allocate(1024);
 		sChannel.read(buffer);
@@ -155,6 +161,8 @@ public class Client
 	public static void processWrite(SelectionKey key, String message)
 	                                                                 throws Exception
 	{
+		System.out.println("processWrite(\"" + message + "\")");
+		
 		SocketChannel sChannel = (SocketChannel)key.channel();
 		ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
 		sChannel.write(buffer);

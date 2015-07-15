@@ -77,7 +77,7 @@ public class Server
 	}
 
 	public static void processReadySet(Set<SelectionKey> readySet)
-			throws Exception
+	                                                              throws Exception
 	{
 		SelectionKey key = null;
 		Iterator<SelectionKey> iterator = null;
@@ -95,13 +95,30 @@ public class Server
 			if (key.isReadable())
 			{
 				String message = Server.processRead(key);
-				if (message.length() > 0) Server.echoMessage(key, message);
+				if (message.length() > 0)
+				{
+					System.out.print("");
+					if (message.equalsIgnoreCase("bye"))
+					{
+						System.out.println("Bye bye!!");
+						System.out.println("Closing channel....");
+						key.channel().close();
+						key.cancel();
+					}
+					else
+					{
+						Server.echoMessage(key, message);
+						System.out.print("");
+					}
+				}
 			}
 		}
 	}
 	
 	public static void processAccept(SelectionKey key) throws IOException
 	{
+		System.out.println("processAccept()");
+
 		// This method call indicates that we got a new connection
 		// request. Accept the connection request and register the new
 		// socket channel with the selector, so that the client can
@@ -117,6 +134,8 @@ public class Server
 
 	public static String processRead(SelectionKey key) throws Exception
 	{
+		System.out.println("processRead()");
+
 		SocketChannel sChannel = (SocketChannel)key.channel();
 		ByteBuffer buffer = ByteBuffer.allocate(1024);
 		int bytesCount = sChannel.read(buffer);
@@ -138,6 +157,8 @@ public class Server
 	public static void echoMessage(SelectionKey key, String message)
 	                                                                throws IOException
 	{
+		System.out.println("echoMessage(\"" + message + "\")");
+
 		SocketChannel sChannel = (SocketChannel)key.channel();
 		ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
 		sChannel.write(buffer);
