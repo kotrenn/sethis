@@ -40,32 +40,32 @@ import java.util.Set;
 public class Client
 {
 	private static BufferedReader userInputReader = null;
-	
+
 	public static void main(String[] args) throws Exception
 	{
 		System.out.println("Initializing Sethis Client....");
 		System.out.print("Using Java version ");
 		System.out.println(System.getProperty("java.version"));
-
+		
 		InetAddress serverIPAddress = InetAddress.getByName("localhost");
 		int port = 1337;
 		InetSocketAddress serverAddress = new InetSocketAddress(
 		                                                        serverIPAddress,
 		                                                        port);
-
+		
 		// Get a selector
 		Selector selector = Selector.open();
-
+		
 		// Create and configure a client socket channel
 		SocketChannel channel = SocketChannel.open();
 		channel.configureBlocking(false);
 		channel.connect(serverAddress);
-		
+
 		// Register the channel for connect, read, and write operations
 		int operations = SelectionKey.OP_CONNECT | SelectionKey.OP_READ
-				| SelectionKey.OP_WRITE;
+		                 | SelectionKey.OP_WRITE;
 		channel.register(selector, operations);
-		
+
 		Client.userInputReader = new BufferedReader(
 		                                            new InputStreamReader(
 		                                                                  System.in));
@@ -73,38 +73,39 @@ public class Client
 			if (selector.select() > 0)
 			{
 				boolean doneStatus = Client.processReadySet(selector
-				        .selectedKeys());
+				                                            .selectedKeys());
 				if (doneStatus) break;
 			}
-		
+
 		channel.close();
 	}
-
-	public static boolean processReadySet(Set readySet) throws Exception
+	
+	public static boolean processReadySet(Set<SelectionKey> readySet)
+	                                                                 throws Exception
 	{
 		SelectionKey key = null;
-		Iterator iterator = null;
+		Iterator<SelectionKey> iterator = null;
 		iterator = readySet.iterator();
-
+		
 		while (iterator.hasNext())
 		{
-			key = (SelectionKey)iterator.next();
-
+			key = iterator.next();
+			
 			// Remove the key from the ready set
 			iterator.remove();
-
+			
 			if (key.isConnectable())
 			{
 				boolean connected = Client.processConnect(key);
 				if (!connected) return true; // Exit
 			}
-
+			
 			if (key.isReadable())
 			{
 				String message = Client.processRead(key);
 				System.out.println("[Server]: " + message);
 			}
-
+			
 			if (key.isWritable())
 			{
 				String message = Client.getUserInput();
@@ -112,14 +113,14 @@ public class Client
 				Client.processWrite(key, message);
 			}
 		}
-
+		
 		return false; // Not done yet
 	}
-	
+
 	public static boolean processConnect(SelectionKey key)
 	{
 		SocketChannel channel = (SocketChannel)key.channel();
-		
+
 		try
 		{
 			// Call the finishConnect() in a loop as it is non-blocking
@@ -134,10 +135,10 @@ public class Client
 			e.printStackTrace();
 			return false;
 		}
-		
+
 		return true;
 	}
-
+	
 	public static String processRead(SelectionKey key) throws Exception
 	{
 		SocketChannel sChannel = (SocketChannel)key.channel();
@@ -150,15 +151,15 @@ public class Client
 		String message = charBuffer.toString();
 		return message;
 	}
-	
+
 	public static void processWrite(SelectionKey key, String message)
-			throws Exception
+	                                                                 throws Exception
 	{
 		SocketChannel sChannel = (SocketChannel)key.channel();
 		ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
 		sChannel.write(buffer);
 	}
-
+	
 	public static String getUserInput() throws IOException
 	{
 		String promptMessage = "Please enter a message (Bye to quit):";

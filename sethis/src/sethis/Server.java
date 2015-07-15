@@ -76,14 +76,15 @@ public class Server
 		}
 	}
 
-	public static void processReadySet(Set readySet) throws Exception
+	public static void processReadySet(Set<SelectionKey> readySet)
+			throws Exception
 	{
 		SelectionKey key = null;
-		Iterator iterator = null;
+		Iterator<SelectionKey> iterator = null;
 		iterator = readySet.iterator();
 		while (iterator.hasNext())
 		{
-			key = (SelectionKey)iterator.next();
+			key = iterator.next();
 			
 			// Remove the key from the ready key set
 			iterator.remove();
