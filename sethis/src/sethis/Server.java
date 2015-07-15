@@ -22,6 +22,15 @@
 
 package sethis;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+
 public class Server
 {
 	public static void main(String[] args)
@@ -29,5 +38,82 @@ public class Server
 		System.out.println("Initializing Sethis Server....");
 		System.out.print("Using Java version ");
 		System.out.println(System.getProperty("java.version"));
+		
+		try
+		{
+			int port = 1337;
+			int queueSize = 100;
+			InetAddress localhost = InetAddress.getByName("localhost");
+			
+			// Create a Server socket
+			ServerSocket serverSocket = new ServerSocket(port, queueSize,
+			                                             localhost);
+			System.out.println("Server started at: " + serverSocket);
+			
+			// Keep accepting client connections in an infinite loop
+			while (true)
+			{
+				System.out.println("Waiting for a connection....");
+				
+				// Accept a connection
+				final Socket activeSocket = serverSocket.accept();
+				
+				System.out
+				        .println("Received a connection from " + activeSocket);
+				
+				// Create a new thread to handle the connection
+				Runnable runnable = () -> Server
+				        .handleClientRequest(activeSocket);
+				new Thread(runnable).start();
+			}
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+	}
+	
+	public static void handleClientRequest(Socket socket)
+	{
+		BufferedReader socketReader = null;
+		BufferedWriter socketWriter = null;
+		
+		try
+		{
+			socketReader = new BufferedReader(
+			                                  new InputStreamReader(socket
+			                                          .getInputStream()));
+			socketWriter = new BufferedWriter(
+			                                  new OutputStreamWriter(socket
+			                                          .getOutputStream()));
+
+			String inMessage = null;
+			while ((inMessage = socketReader.readLine()) != null)
+			{
+				System.out.println("Received from client: " + inMessage);
+
+				// Echo the received message to the client
+				String outMessage = inMessage;
+				socketWriter.write(outMessage);
+				socketWriter.write("\n");
+				socketWriter.flush();
+			}
+
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+		finally
+		{
+			try
+			{
+				socket.close();
+			}
+			catch (IOException e)
+			{
+				e.printStackTrace();
+			}
+		}
 	}
 }
