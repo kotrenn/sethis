@@ -22,98 +22,123 @@
 
 package sethis;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.util.Iterator;
+import java.util.Set;
 
 public class Server
 {
-	public static void main(String[] args)
+	public static void main(String[] args) throws Exception
 	{
 		System.out.println("Initializing Sethis Server....");
 		System.out.print("Using Java version ");
 		System.out.println(System.getProperty("java.version"));
 		
-		try
+		int port = 1337;
+		InetAddress hostIPAddress = InetAddress.getByName("localhost");
+		
+		// Get a selector
+		Selector selector = Selector.open();
+		
+		// Get a server socket channel
+		ServerSocketChannel ssChannel = ServerSocketChannel.open();
+		
+		// Make the server socket channel non-blocking and bind it to an
+		// address
+		ssChannel.configureBlocking(false);
+		ssChannel.bind(new InetSocketAddress(hostIPAddress, port));
+		
+		// Register a socket server channel with the selector for accept
+		// operation,
+		// so that it can be notified when a new connection request arrives
+		ssChannel.register(selector, SelectionKey.OP_ACCEPT);
+		
+		// Now we will keep waiting in a loop for any kind of request
+		// that arrives to the server - connection, read, or write
+		// request. If a connection request comes in, we will accept
+		// the request and register a new socket channel with the selector
+		// for read and write operations. If read or write requests come
+		// in, we will forward that request to the registered channel.
+		while (true)
 		{
-			int port = 1337;
-			int queueSize = 100;
-			InetAddress localhost = InetAddress.getByName("localhost");
-			
-			// Create a Server socket
-			ServerSocket serverSocket = new ServerSocket(port, queueSize,
-			                                             localhost);
-			System.out.println("Server started at: " + serverSocket);
-			
-			// Keep accepting client connections in an infinite loop
-			while (true)
-			{
-				System.out.println("Waiting for a connection....");
-				
-				// Accept a connection
-				final Socket activeSocket = serverSocket.accept();
-				
-				System.out
-				        .println("Received a connection from " + activeSocket);
-				
-				// Create a new thread to handle the connection
-				Runnable runnable = () -> Server
-				        .handleClientRequest(activeSocket);
-				new Thread(runnable).start();
-			}
+			if (selector.select() <= 0) continue;
+			Server.processReadySet(selector.selectedKeys());
 		}
-		catch (IOException e)
+	}
+
+	public static void processReadySet(Set readySet) throws Exception
+	{
+		SelectionKey key = null;
+		Iterator iterator = null;
+		iterator = readySet.iterator();
+		while (iterator.hasNext())
 		{
-			e.printStackTrace();
+			key = (SelectionKey)iterator.next();
+			
+			// Remove the key from the ready key set
+			iterator.remove();
+			
+			// Process the key according to the operation it is ready for
+			if (key.isAcceptable()) Server.processAccept(key);
+			
+			if (key.isReadable())
+			{
+				String message = Server.processRead(key);
+				if (message.length() > 0) Server.echoMessage(key, message);
+			}
 		}
 	}
 	
-	public static void handleClientRequest(Socket socket)
+	public static void processAccept(SelectionKey key) throws IOException
 	{
-		BufferedReader socketReader = null;
-		BufferedWriter socketWriter = null;
+		// This method call indicates that we got a new connection
+		// request. Accept the connection request and register the new
+		// socket channel with the selector, so that the client can
+		// communicate on a new channel.
+		ServerSocketChannel ssChannel = (ServerSocketChannel)key.channel();
+		SocketChannel sChannel = ssChannel.accept();
+		sChannel.configureBlocking(false);
 		
-		try
-		{
-			socketReader = new BufferedReader(
-			                                  new InputStreamReader(socket
-			                                          .getInputStream()));
-			socketWriter = new BufferedWriter(
-			                                  new OutputStreamWriter(socket
-			                                          .getOutputStream()));
+		// Register only for read. Our message is small and we write it
+		// back to the client as soon as we read it.
+		sChannel.register(key.selector(), SelectionKey.OP_READ);
+	}
 
-			String inMessage = null;
-			while ((inMessage = socketReader.readLine()) != null)
-			{
-				System.out.println("Received from client: " + inMessage);
+	public static String processRead(SelectionKey key) throws Exception
+	{
+		SocketChannel sChannel = (SocketChannel)key.channel();
+		ByteBuffer buffer = ByteBuffer.allocate(1024);
+		int bytesCount = sChannel.read(buffer);
+		String message = "";
 
-				// Echo the received message to the client
-				String outMessage = inMessage;
-				socketWriter.write(outMessage);
-				socketWriter.write("\n");
-				socketWriter.flush();
-			}
+		if (bytesCount > 0)
+		{
+			buffer.flip();
+			Charset charset = Charset.forName("UTF-8");
+			CharsetDecoder decoder = charset.newDecoder();
+			CharBuffer charBuffer = decoder.decode(buffer);
+			message = charBuffer.toString();
+			System.out.println("Received message: " + message);
+		}
 
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
-		finally
-		{
-			try
-			{
-				socket.close();
-			}
-			catch (IOException e)
-			{
-				e.printStackTrace();
-			}
-		}
+		return message;
+	}
+
+	public static void echoMessage(SelectionKey key, String message)
+	                                                                throws IOException
+	{
+		SocketChannel sChannel = (SocketChannel)key.channel();
+		ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
+		sChannel.write(buffer);
 	}
 }

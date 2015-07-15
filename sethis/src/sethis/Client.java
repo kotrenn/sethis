@@ -23,83 +23,147 @@
 package sethis;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.net.Socket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.SocketChannel;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.util.Iterator;
+import java.util.Set;
 
 public class Client
 {
-	public static void main(String[] args)
+	private static BufferedReader userInputReader = null;
+	
+	public static void main(String[] args) throws Exception
 	{
 		System.out.println("Initializing Sethis Client....");
 		System.out.print("Using Java version ");
 		System.out.println(System.getProperty("java.version"));
+
+		InetAddress serverIPAddress = InetAddress.getByName("localhost");
+		int port = 1337;
+		InetSocketAddress serverAddress = new InetSocketAddress(
+		                                                        serverIPAddress,
+		                                                        port);
+
+		// Get a selector
+		Selector selector = Selector.open();
+
+		// Create and configure a client socket channel
+		SocketChannel channel = SocketChannel.open();
+		channel.configureBlocking(false);
+		channel.connect(serverAddress);
 		
-		Socket socket = null;
-		BufferedReader socketReader = null;
-		BufferedWriter socketWriter = null;
+		// Register the channel for connect, read, and write operations
+		int operations = SelectionKey.OP_CONNECT | SelectionKey.OP_READ
+				| SelectionKey.OP_WRITE;
+		channel.register(selector, operations);
+		
+		Client.userInputReader = new BufferedReader(
+		                                            new InputStreamReader(
+		                                                                  System.in));
+		while (true)
+			if (selector.select() > 0)
+			{
+				boolean doneStatus = Client.processReadySet(selector
+				        .selectedKeys());
+				if (doneStatus) break;
+			}
+		
+		channel.close();
+	}
+
+	public static boolean processReadySet(Set readySet) throws Exception
+	{
+		SelectionKey key = null;
+		Iterator iterator = null;
+		iterator = readySet.iterator();
+
+		while (iterator.hasNext())
+		{
+			key = (SelectionKey)iterator.next();
+
+			// Remove the key from the ready set
+			iterator.remove();
+
+			if (key.isConnectable())
+			{
+				boolean connected = Client.processConnect(key);
+				if (!connected) return true; // Exit
+			}
+
+			if (key.isReadable())
+			{
+				String message = Client.processRead(key);
+				System.out.println("[Server]: " + message);
+			}
+
+			if (key.isWritable())
+			{
+				String message = Client.getUserInput();
+				if (message.equalsIgnoreCase("bye")) return true; // Exit
+				Client.processWrite(key, message);
+			}
+		}
+
+		return false; // Not done yet
+	}
+	
+	public static boolean processConnect(SelectionKey key)
+	{
+		SocketChannel channel = (SocketChannel)key.channel();
 		
 		try
 		{
-			String host = "localhost";
-			int port = 1337;
-			
-			// Create a socket to connect to the server
-			socket = new Socket(host, port);
-			System.out.println("Started client socket at "
-			                   + socket.getLocalSocketAddress());
-			
-			// Create buffered readers and writers using the socket's input and
-			// output streams
-			socketReader = new BufferedReader(
-			                                  new InputStreamReader(socket
-			                                          .getInputStream()));
-			socketWriter = new BufferedWriter(
-			                                  new OutputStreamWriter(socket
-			                                          .getOutputStream()));
-			
-			// Create a buffered reader for user input
-			BufferedReader consoleReader = new BufferedReader(
-			                                                  new InputStreamReader(
-			                                                                        System.in));
-			
-			String promptMessage = "Please enter a message (Bye to quit):";
-			String outMessage = null;
-			
-			System.out.print(promptMessage);
-			while ((outMessage = consoleReader.readLine()) != null)
-			{
-				if (outMessage.equalsIgnoreCase("bye")) break;
-				
-				// Add a new line to the message for the server
-				socketWriter.write(outMessage);
-				socketWriter.write("\n");
-				socketWriter.flush();
-				
-				// Read and display the message from the server
-				String inMessage = socketReader.readLine();
-				System.out.println("Server: " + inMessage);
-				
-				System.out.println(""); // Print a blank line
-				System.out.print(promptMessage);
-			}
+			// Call the finishConnect() in a loop as it is non-blocking
+			// for your channel
+			while (channel.isConnectionPending())
+				channel.finishConnect();
 		}
 		catch (IOException e)
 		{
+			// Cancel the channel's registration with the selector
+			key.cancel();
 			e.printStackTrace();
+			return false;
 		}
-		finally
-		{
-			if (socket != null) try
-			{
-				socket.close();
-			}
-			catch (IOException e)
-			{
-				e.printStackTrace();
-			}
-		}
+		
+		return true;
+	}
+
+	public static String processRead(SelectionKey key) throws Exception
+	{
+		SocketChannel sChannel = (SocketChannel)key.channel();
+		ByteBuffer buffer = ByteBuffer.allocate(1024);
+		sChannel.read(buffer);
+		buffer.flip();
+		Charset charset = Charset.forName("UTF-8");
+		CharsetDecoder decoder = charset.newDecoder();
+		CharBuffer charBuffer = decoder.decode(buffer);
+		String message = charBuffer.toString();
+		return message;
+	}
+	
+	public static void processWrite(SelectionKey key, String message)
+			throws Exception
+	{
+		SocketChannel sChannel = (SocketChannel)key.channel();
+		ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
+		sChannel.write(buffer);
+	}
+
+	public static String getUserInput() throws IOException
+	{
+		String promptMessage = "Please enter a message (Bye to quit):";
+		System.out.print(promptMessage);
+		String userMessage = Client.userInputReader.readLine();
+		return userMessage;
 	}
 }
